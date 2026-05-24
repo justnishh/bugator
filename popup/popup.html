@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bugator</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup">
+    <!-- Custom Confirm Modal -->
+    <div class="modal-overlay" id="confirmModal" hidden role="dialog" aria-modal="true" aria-labelledby="modalMessage">
+      <div class="modal">
+        <p class="modal-message" id="modalMessage">Are you sure?</p>
+        <div class="modal-actions">
+          <button class="modal-btn modal-cancel" id="modalCancel">Cancel</button>
+          <button class="modal-btn modal-confirm" id="modalConfirm">Confirm</button>
+        </div>
+      </div>
+    </div>
+    <header class="popup-header">
+      <div class="popup-brand">
+        <svg class="popup-logo" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="4"/>
+          <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+        </svg>
+        <h1>Bugator</h1>
+      </div>
+      <span class="popup-version">v1.1</span>
+      <button id="settingsBtn" class="btn-icon-sm" title="AI Settings">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
+        </svg>
+      </button>
+    </header>
+
+    <div class="popup-actions">
+      <button id="toggleBtn" class="btn-primary">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5"/>
+        </svg>
+        <span>Start Picking</span>
+      </button>
+      <button id="recordBtn" class="btn-record">
+        <span class="record-dot"></span>
+        <span>Record</span>
+      </button>
+      <button id="dashboardBtn" class="btn-secondary">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
+        </svg>
+        Open Dashboard
+      </button>
+    </div>
+
+    <div class="popup-stats" id="stats">
+      <div class="stat">
+        <span class="stat-value" id="bugCount">0</span>
+        <span class="stat-label">Bugs</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value" id="pageCount">0</span>
+        <span class="stat-label">Pages</span>
+      </div>
+    </div>
+
+    <div class="popup-list" id="bugList">
+      <p class="empty-state">No bugs reported yet.<br>Click "Start Picking" to begin.</p>
+    </div>
+
+    <footer class="popup-footer">
+      <div class="export-group">
+        <button id="exportBtn" class="btn-ghost" title="Export bugs">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+          </svg>
+          Export
+        </button>
+        <select id="exportFormat" class="export-select">
+          <option value="json">JSON</option>
+          <option value="csv">CSV</option>
+          <option value="md">Markdown</option>
+        </select>
+      </div>
+      <button id="clearBtn" class="btn-ghost btn-danger" title="Clear all bugs">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+        </svg>
+        Clear
+      </button>
+    </footer>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

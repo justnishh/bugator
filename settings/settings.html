@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bugator Settings</title>
+  <link rel="stylesheet" href="settings.css">
+</head>
+<body>
+  <div class="settings">
+    <header class="settings-header">
+      <h1>AI Settings</h1>
+      <p class="settings-desc">Configure your AI provider to enhance bug reports.</p>
+    </header>
+
+    <div class="settings-form">
+      <div class="field">
+        <label for="provider">Provider</label>
+        <select id="provider">
+          <option value="">Select provider...</option>
+          <option value="openrouter">OpenRouter</option>
+          <option value="claude">Claude (Anthropic)</option>
+          <option value="gemini">Gemini (Google)</option>
+          <option value="openai">OpenAI</option>
+          <option value="nvidia">Nvidia NIM</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="apiKey">API Key</label>
+        <div class="key-input">
+          <input type="password" id="apiKey" placeholder="sk-..." autocomplete="off">
+          <button id="toggleKey" class="btn-icon" title="Show/hide key">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="field">
+        <button id="saveBtn" class="btn-primary">Save Settings</button>
+      </div>
+
+      <div id="status" class="status" hidden></div>
+    </div>
+  </div>
+  <script src="settings.js"></script>
+</body>
+</html>
