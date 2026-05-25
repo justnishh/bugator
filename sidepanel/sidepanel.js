@@ -139,6 +139,11 @@ function renderBugs(bugs) {
             <span class="bug-card-tag">${bug.tagName}</span>
             <div class="bug-card-actions">
               <button class="bug-card-btn btn-ai" title="Enhance with AI" data-action="enhance">✨</button>
+              <button class="bug-card-btn btn-edit" title="Edit description" data-action="edit">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                </svg>
+              </button>
               <button class="bug-card-btn btn-copy" title="Copy bug text" data-action="copy">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
@@ -204,8 +209,17 @@ bugList.addEventListener('click', async (e) => {
 
   if (action === 'play-video') {
     const videoSection = btn.closest('.bug-card-video');
-    const player = videoSection.querySelector('.video-player');
-    player.hidden = !player.hidden;
+    const video = videoSection.querySelector('.video-player video');
+    if (!video || !video.src) return;
+    const modal = document.createElement('div');
+    modal.className = 'bugator-video-modal';
+    modal.innerHTML = `<video controls autoplay src="${video.src}"></video><button class="bugator-video-modal-close">&times;</button>`;
+    document.body.appendChild(modal);
+    requestAnimationFrame(() => modal.classList.add('active'));
+    const close = () => { modal.classList.remove('active'); setTimeout(() => modal.remove(), 180); };
+    modal.querySelector('.bugator-video-modal-close').onclick = close;
+    modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+    document.addEventListener('keydown', function esc(e) { if (e.key === 'Escape') { close(); document.removeEventListener('keydown', esc); } });
     return;
   }
 
@@ -217,6 +231,34 @@ bugList.addEventListener('click', async (e) => {
       a.download = `bugator-${bug.id}.webm`;
       a.click();
     }
+    return;
+  }
+
+  if (action === 'edit') {
+    const descEl = card.querySelector('.bug-card-desc');
+    if (descEl.querySelector('.edit-area')) return;
+    const bug = allBugs.find(b => b.id === id);
+    if (!bug) return;
+    const original = bug.description;
+    descEl.innerHTML = `<textarea class="edit-area">${escapeHtml(original)}</textarea><div class="edit-btns"><button class="edit-save" data-action="edit-save">Save</button><button class="edit-cancel" data-action="edit-cancel">Cancel</button></div>`;
+    descEl.querySelector('.edit-area').focus();
+    return;
+  }
+
+  if (action === 'edit-save') {
+    const descEl = card.querySelector('.bug-card-desc');
+    const newText = descEl.querySelector('.edit-area').value.trim();
+    if (!newText) return;
+    const result = await chrome.storage.local.get('bugator_bugs');
+    const bugs = result.bugator_bugs || [];
+    const idx = bugs.findIndex(b => b.id === id);
+    if (idx !== -1) { bugs[idx].description = newText; bugs[idx].enhanced = false; await chrome.storage.local.set({ bugator_bugs: bugs }); }
+    loadBugs();
+    return;
+  }
+
+  if (action === 'edit-cancel') {
+    loadBugs();
     return;
   }
 
@@ -388,57 +430,81 @@ async function callAI(config, bug) {
   };
 
   const p = providers[config.provider];
-  const prompt = `You are an expert Senior QA Automation Engineer and Technical Writer. Take this raw bug data and rewrite it into a flawless, professional bug ticket.
 
-Rules: Strip conversational language. Use precise technical terminology. Fix grammar. Do not invent facts — use ONLY the data below.
+  const systemMsg = `You are a Senior QA Engineer writing bug tickets for a development team. You produce concise, technically precise, actionable bug reports. Rules:
+- Use ONLY the provided data. Never invent steps, errors, or behaviors not evidenced in the input.
+- If console errors or failed network requests are provided, incorporate them as root cause evidence.
+- Severity is based on: Critical = app crash/data loss/security, High = feature broken/blocked, Medium = degraded UX/visual, Low = cosmetic/minor.
+- Output plain text only. No markdown symbols, no asterisks, no hashtags.`;
 
-RAW BUG DATA:
-- User Notes: ${bug.description}
-- Page URL: ${bug.url}
-- Target Element: ${bug.selector} (${bug.tagName})
-- Element HTML: ${(bug.elementHTML || '').slice(0, 200)}
+  let userMsg = `RAW BUG CAPTURE:
 
-Output EXACTLY this format (plain text, no markdown symbols):
+User Notes: ${bug.description || 'No description'}
+Page URL: ${bug.url || 'unknown'}
+Element: ${bug.selector || 'unknown'} (${bug.tagName || 'unknown'})
+Element HTML: ${(bug.elementHTML || '').slice(0, 500)}
+Viewport: ${bug.viewport ? `${bug.viewport.width}x${bug.viewport.height}` : 'unknown'}`;
 
-Bug Report: [Clear, action-oriented title, max 80 chars]
+  if (bug.environment) {
+    const env = bug.environment;
+    userMsg += `\n\nEnvironment:\nBrowser: ${env.browser || 'unknown'}\nOS: ${env.os || 'unknown'}\nScreen: ${env.screenResolution || 'unknown'} @ ${env.devicePixelRatio || 1}x DPR\nColor Scheme: ${env.colorScheme || 'unknown'}\nConnection: ${env.connection || 'unknown'}`;
+  }
+
+  if (bug.consoleLogs && bug.consoleLogs.length > 0) {
+    const logs = bug.consoleLogs.slice(-10).map(l => `[${l.level}] ${l.message}${l.stack ? ' | ' + l.stack.slice(0, 100) : ''}`).join('\n');
+    userMsg += `\n\nConsole Errors/Warnings:\n${logs}`;
+  }
+
+  if (bug.networkRequests && bug.networkRequests.length > 0) {
+    const failed = bug.networkRequests.filter(r => r.failed || r.status >= 400).slice(-5);
+    if (failed.length > 0) {
+      const reqs = failed.map(r => `${r.method || 'GET'} ${r.url} → ${r.status || 'failed'} (${r.duration || '?'}ms)`).join('\n');
+      userMsg += `\n\nFailed Network Requests:\n${reqs}`;
+    }
+  }
+
+  if (bug.video) userMsg += `\n\nVideo Evidence: ${bug.video.duration || 0}s screen recording attached.`;
+  if (bug.screenshot) userMsg += `\nScreenshot: attached.`;
+
+  userMsg += `\n\nWrite the bug report in this EXACT format:
+
+Bug Report: [action-oriented title, max 80 chars]
 
 Bug Summary:
-[2-3 sentence overview of the failure.]
+[2-3 sentences: what fails, where, impact]
 
 Environment:
-URL: ${bug.url}
-Element: ${bug.selector}
+[Browser, OS, viewport, relevant device info]
 
 Steps to Reproduce:
-1. Navigate to ${bug.url}
-2. Locate the ${bug.tagName} element (${bug.selector})
-3. [Infer from context]
-4. Observe: [What user sees]
+1. [Step based on URL and element]
+2. [Step based on context]
+3. Observe: [what user sees]
 
 Expected Result:
-[What should happen.]
+[Correct behavior]
 
 Actual Result:
-[What is happening wrong.]
+[Broken behavior, cite console errors or network failures if present]
 
-Severity: [Critical | High | Medium | Low] - [1-sentence impact.]
+Severity: [Critical | High | Medium | Low] - [why]
 
-Component: ${bug.selector}`;
+Component: [element or page area]`;
 
   let url, headers, body;
 
   if (config.provider === 'claude') {
     url = p.url;
     headers = { 'x-api-key': config.apiKey, 'Content-Type': 'application/json', 'anthropic-version': '2023-06-01' };
-    body = JSON.stringify({ model: p.model, max_tokens: 1024, messages: [{ role: 'user', content: prompt }] });
+    body = JSON.stringify({ model: p.model, max_tokens: 1024, system: systemMsg, messages: [{ role: 'user', content: userMsg }] });
   } else if (config.provider === 'gemini') {
     url = p.url(config.apiKey);
     headers = { 'Content-Type': 'application/json', 'x-goog-api-key': config.apiKey };
-    body = JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] });
+    body = JSON.stringify({ contents: [{ parts: [{ text: systemMsg + '\n\n' + userMsg }] }] });
   } else {
     url = p.url;
     headers = { 'Authorization': `Bearer ${config.apiKey}`, 'Content-Type': 'application/json' };
-    body = JSON.stringify({ model: p.model, messages: [{ role: 'user', content: prompt }], max_tokens: 1024 });
+    body = JSON.stringify({ model: p.model, messages: [{ role: 'system', content: systemMsg }, { role: 'user', content: userMsg }], max_tokens: 1024 });
   }
 
   const res = await fetch(url, { method: 'POST', headers, body });

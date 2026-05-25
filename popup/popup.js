@@ -94,6 +94,31 @@ function renderBugs(bugs) {
   bugList.innerHTML = html;
 }
 
+// Edit bug description on click
+bugList.addEventListener('click', async (e) => {
+  const desc = e.target.closest('.bug-item-desc');
+  if (!desc || desc.querySelector('.edit-area')) return;
+  const card = desc.closest('.bug-item');
+  if (!card) return;
+  const id = card.dataset.id;
+  const result = await chrome.storage.local.get('bugator_bugs');
+  const bugs = result.bugator_bugs || [];
+  const bug = bugs.find(b => b.id === id);
+  if (!bug) return;
+  desc.innerHTML = `<textarea class="edit-area">${escapeHtml(bug.description)}</textarea><div class="edit-btns"><button class="edit-save">Save</button><button class="edit-cancel">Cancel</button></div>`;
+  desc.querySelector('.edit-area').focus();
+  desc.querySelector('.edit-save').onclick = async () => {
+    const newText = desc.querySelector('.edit-area').value.trim();
+    if (!newText) return;
+    const r = await chrome.storage.local.get('bugator_bugs');
+    const b = r.bugator_bugs || [];
+    const idx = b.findIndex(x => x.id === id);
+    if (idx !== -1) { b[idx].description = newText; b[idx].enhanced = false; await chrome.storage.local.set({ bugator_bugs: b }); }
+    loadBugs();
+  };
+  desc.querySelector('.edit-cancel').onclick = () => loadBugs();
+});
+
 function formatTime(ts) {
   const d = new Date(ts);
   const now = new Date();

@@ -69,6 +69,16 @@
   let recordingInterval = null;
   let lastRecording = null; // { dataUrl, duration, size }
 
+  // Click ripple during recording
+  function onRecordingClick(e) {
+    const ripple = document.createElement('div');
+    ripple.className = 'bugator-click-ripple ' + (e.button === 2 ? 'bugator-click-ripple--right' : 'bugator-click-ripple--left');
+    ripple.style.left = e.clientX + 'px';
+    ripple.style.top = e.clientY + 'px';
+    document.body.appendChild(ripple);
+    ripple.addEventListener('animationend', () => ripple.remove());
+  }
+
   async function startRecording(streamId) {
     try {
       let stream;
@@ -111,9 +121,10 @@
       mediaRecorder.start(1000);
       recordingStartTime = Date.now();
       showRecordingBar('recording');
+      document.addEventListener('mousedown', onRecordingClick, true);
 
       // Auto-stop at 30s
-      recordingTimer = setTimeout(() => stopRecording(), 30000);
+
     } catch (err) {
       console.error('[Bugator] Recording failed:', err);
     }
@@ -136,6 +147,7 @@
   function stopRecording() {
     if (recordingTimer) { clearTimeout(recordingTimer); recordingTimer = null; }
     if (recordingInterval) { clearInterval(recordingInterval); recordingInterval = null; }
+    document.removeEventListener('mousedown', onRecordingClick, true);
     if (mediaRecorder && mediaRecorder.state !== 'inactive') {
       mediaRecorder.stop();
     }
@@ -144,6 +156,7 @@
   function cancelRecording() {
     if (recordingTimer) { clearTimeout(recordingTimer); recordingTimer = null; }
     if (recordingInterval) { clearInterval(recordingInterval); recordingInterval = null; }
+    document.removeEventListener('mousedown', onRecordingClick, true);
     if (mediaRecorder && mediaRecorder.state !== 'inactive') {
       mediaRecorder.stream.getTracks().forEach(t => t.stop());
       mediaRecorder = null;
@@ -253,7 +266,7 @@
       aiBtn.disabled = true;
       try {
         if (!window.__bugatorAI) throw new Error('AI service not loaded. Reload the page.');
-        const bugData = { description, url: window.location.href, selector: 'page', tagName: 'page', elementHTML: '', viewport: { width: window.innerWidth, height: window.innerHeight } };
+        const bugData = { description, url: window.location.href, selector: 'page', tagName: 'page', elementHTML: '', viewport: { width: window.innerWidth, height: window.innerHeight }, environment: getEnvironment(), consoleLogs: [...consoleBuffer], networkRequests: [...networkBuffer], video: lastRecording ? { duration: lastRecording.duration } : null };
         const enhanced = await window.__bugatorAI.enhanceBug(bugData);
         textarea.value = enhanced.replace(/\*\*/g, '').replace(/###/g, '').replace(/##/g, '').replace(/\*/g, '');
         textarea.style.minHeight = '140px';
@@ -502,8 +515,11 @@
           url: window.location.href,
           selector: getSelector(el),
           tagName: el.tagName.toLowerCase(),
-          elementHTML: el.outerHTML.slice(0, 300),
-          viewport: { width: window.innerWidth, height: window.innerHeight }
+          elementHTML: el.outerHTML.slice(0, 500),
+          viewport: { width: window.innerWidth, height: window.innerHeight },
+          environment: getEnvironment(),
+          consoleLogs: [...consoleBuffer],
+          networkRequests: [...networkBuffer]
         };
         const enhanced = await window.__bugatorAI.enhanceBug(bugData);
         textarea.value = enhanced.replace(/\*\*/g, '').replace(/###/g, '').replace(/##/g, '').replace(/\*/g, '');

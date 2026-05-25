@@ -377,3 +377,26 @@
   0%, 100% { opacity: 1; }
   50% { opacity: 0.3; }
 }
+
+
+/* Click ripple during recording */
+.bugator-click-ripple {
+  position: fixed;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 2147483647;
+  transform: translate(-50%, -50%) scale(0);
+  animation: bugator-ripple 400ms cubic-bezier(.165, .84, .44, 1) forwards;
+}
+.bugator-click-ripple--left { background: rgba(34, 197, 94, 0.5); }
+.bugator-click-ripple--right { background: rgba(239, 68, 68, 0.5); }
+
+@keyframes bugator-ripple {
+  to { transform: translate(-50%, -50%) scale(3); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bugator-click-ripple { animation-duration: 0.01ms !important; }
+}

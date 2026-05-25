@@ -36,48 +36,78 @@ const AI_PROVIDERS = {
   }
 };
 
-const BUG_ENHANCE_PROMPT = `You are an expert Senior QA Automation Engineer and Technical Writer. Your task is to take raw, informal bug notes captured from a browser and rewrite them into a flawless, professional bug ticket suitable for Jira, GitHub, or Azure DevOps.
+const BUG_ENHANCE_SYSTEM = `You are a Senior QA Engineer writing bug tickets for a development team. You produce concise, technically precise, actionable bug reports. Rules:
+- Use ONLY the provided data. Never invent steps, errors, or behaviors not evidenced in the input.
+- If console errors or failed network requests are provided, incorporate them as root cause evidence.
+- Severity is based on: Critical = app crash/data loss/security, High = feature broken/blocked, Medium = degraded UX/visual, Low = cosmetic/minor.
+- Output plain text only. No markdown symbols, no asterisks, no hashtags.`;
 
-Follow these strict rules to ensure high quality:
-1. Strip out all conversational language, personal pronouns, and filler words.
-2. Use precise technical terminology (e.g., "DOM rendering," "UI latency," "viewport," "element state," "layout shift") based on what the notes describe.
-3. Fix all grammar, spelling, and phrasing to make it sound highly professional.
-4. Do not invent facts. Use ONLY the information provided below.
+function buildUserPrompt(bug) {
+  let prompt = `RAW BUG CAPTURE:
 
-RAW BUG DATA (captured by Bugator extension):
-- User Notes: {description}
-- Page URL: {url}
-- Target Element: {selector} ({tagName})
-- Element HTML: {elementHTML}
-- Viewport: {viewport}
+User Notes: ${bug.description || 'No description'}
+Page URL: ${bug.url || 'unknown'}
+Element: ${bug.selector || 'unknown'} (${bug.tagName || 'unknown'})
+Element HTML: ${(bug.elementHTML || '').slice(0, 500)}
+Viewport: ${bug.viewport ? `${bug.viewport.width}x${bug.viewport.height}` : 'unknown'}`;
 
-Structure your output EXACTLY using this format (plain text, no markdown symbols):
+  if (bug.environment) {
+    const env = bug.environment;
+    prompt += `\n\nEnvironment:
+Browser: ${env.browser || 'unknown'}
+OS: ${env.os || 'unknown'}
+Screen: ${env.screenResolution || 'unknown'} @ ${env.devicePixelRatio || 1}x DPR
+Language: ${env.language || 'unknown'}
+Timezone: ${env.timezone || 'unknown'}
+Color Scheme: ${env.colorScheme || 'unknown'}
+Connection: ${env.connection || 'unknown'}
+Memory: ${env.memory || 'unknown'}
+CPU Cores: ${env.cores || 'unknown'}`;
+  }
 
-Bug Report: [Clear, concise, action-oriented title, max 80 chars]
+  if (bug.consoleLogs && bug.consoleLogs.length > 0) {
+    const logs = bug.consoleLogs.slice(-10).map(l => `[${l.level}] ${l.message}${l.stack ? ' | ' + l.stack.slice(0, 100) : ''}`).join('\n');
+    prompt += `\n\nConsole Errors/Warnings (most recent):\n${logs}`;
+  }
+
+  if (bug.networkRequests && bug.networkRequests.length > 0) {
+    const failed = bug.networkRequests.filter(r => r.failed || r.status >= 400).slice(-5);
+    if (failed.length > 0) {
+      const reqs = failed.map(r => `${r.method || 'GET'} ${r.url} → ${r.status || 'failed'} (${r.duration || '?'}ms)`).join('\n');
+      prompt += `\n\nFailed Network Requests:\n${reqs}`;
+    }
+  }
+
+  if (bug.video) prompt += `\n\nVideo Evidence: ${bug.video.duration || 0}s screen recording attached.`;
+  if (bug.screenshot) prompt += `\nScreenshot: attached.`;
+
+  prompt += `\n\nWrite the bug report in this EXACT format:
+
+Bug Report: [action-oriented title, max 80 chars]
 
 Bug Summary:
-[2-3 sentence overview of what is failing, where, and the core issue.]
+[2-3 sentences: what fails, where, impact]
 
 Environment:
-URL: {url}
-Element: {selector}
-Viewport: {viewport}
+[Browser, OS, viewport, relevant device info]
 
 Steps to Reproduce:
-1. Navigate to {url}
-2. Locate the {tagName} element ({selector})
-3. [Infer minimal steps from context]
-4. Observe: [What the user sees at the point of failure]
+1. [Step based on URL and element]
+2. [Step based on context]
+3. Observe: [what user sees]
 
 Expected Result:
-[What the system should do under correct operating conditions.]
+[Correct behavior]
 
 Actual Result:
-[What the system is doing wrong, highlighting the technical failure.]
+[Broken behavior, cite console errors or network failures if present]
 
-Severity: [Critical | High | Medium | Low] - [1-sentence explanation of impact on user experience or system stability.]
+Severity: [Critical | High | Medium | Low] - [why]
 
-Component: {selector}`;
+Component: [element or page area]`;
+
+  return prompt;
+}
 
 async function getAIConfig() {
   const result = await chrome.storage.local.get('bugator_ai_config');
@@ -93,19 +123,14 @@ async function enhanceBug(bug) {
   const provider = AI_PROVIDERS[config.provider];
   if (!provider) throw new Error('Unknown provider: ' + config.provider);
 
-  const prompt = BUG_ENHANCE_PROMPT
-    .replace(/{description}/g, bug.description)
-    .replace(/{url}/g, bug.url)
-    .replace(/{selector}/g, bug.selector)
-    .replace(/{tagName}/g, bug.tagName)
-    .replace(/{elementHTML}/g, (bug.elementHTML || '').slice(0, 300))
-    .replace(/{viewport}/g, bug.viewport ? `${bug.viewport.width}x${bug.viewport.height}` : 'unknown');
+  const systemMsg = BUG_ENHANCE_SYSTEM;
+  const userMsg = buildUserPrompt(bug);
 
-  const response = await callProvider(config.provider, config.apiKey, prompt, provider);
+  const response = await callProvider(config.provider, config.apiKey, systemMsg, userMsg, provider);
   return response;
 }
 
-async function callProvider(providerKey, apiKey, prompt, provider) {
+async function callProvider(providerKey, apiKey, systemMsg, userMsg, provider) {
   let url = provider.url;
   let body, headers = provider.headers(apiKey);
 
@@ -113,17 +138,21 @@ async function callProvider(providerKey, apiKey, prompt, provider) {
     body = JSON.stringify({
       model: provider.model,
       max_tokens: 1024,
-      messages: [{ role: 'user', content: prompt }]
+      system: systemMsg,
+      messages: [{ role: 'user', content: userMsg }]
     });
   } else if (providerKey === 'gemini') {
     body = JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }]
+      contents: [{ parts: [{ text: systemMsg + '\n\n' + userMsg }] }]
     });
   } else {
     // OpenAI-compatible: openrouter, openai, nvidia
     body = JSON.stringify({
       model: provider.model,
-      messages: [{ role: 'user', content: prompt }],
+      messages: [
+        { role: 'system', content: systemMsg },
+        { role: 'user', content: userMsg }
+      ],
       max_tokens: 1024
     });
   }
